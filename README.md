@@ -7,4 +7,4 @@ Requirement :
   * Reward systeme
   * Owner system
   * Burned coins
-![token](https://github.com/feur25/HumanCoin/assets/39668417/c15c9004-838e-4e08-b0df-9295a352972b)
+![token](https://github.com/feur25/HumanCoin/assets/39668417/aaa88102-f181-4963-aa6a-997faef502b1)
