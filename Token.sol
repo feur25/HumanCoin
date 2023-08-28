@@ -3,15 +3,19 @@ pragma solidity ^0.8.2;
 
 import "./SafeMath.sol";
 import "./Ownable.sol";
-import "./ReentrancyGuard.sol";
+import "./ReentrancyGuard.sol" as ReentrancyGuard;
+import "./NFTToken.sol";
 
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
-contract Token is Ownable, ReentrancyGuard{
+contract Token is Ownable {
 
     using SafeMath for uint256;
+    
+    NFTToken public nftContract;
+    mapping(uint256 => uint256) public nftPrices;
 
     mapping(address => uint256) public balances;
     mapping(address => mapping(address => uint256)) public allowance;
@@ -42,8 +46,11 @@ contract Token is Ownable, ReentrancyGuard{
     IUniswapV2Router02 public uniswapRouter;
     IUniswapV2Factory public uniswapFactory;
     
-    constructor(address _routerAddress) {
-        // Initialize Uniswap router and factory
+    constructor(address _routerAddress, address _nftAddress) {
+        // Initialiser le contrat de NFT
+        nftContract = NFTToken(_nftAddress);
+
+        // Initialiser Uniswap router et factory
         uniswapRouter = IUniswapV2Router02(_routerAddress);
         uniswapFactory = IUniswapV2Factory(uniswapRouter.factory());
 
@@ -51,7 +58,58 @@ contract Token is Ownable, ReentrancyGuard{
         admin = msg.sender;
         transfersPaused = false;
     }
-    
+
+    // Fonction pour créer un NFT
+    function createNFT(address to, uint256 tokenId) external onlyOwner {
+        nftContract.mint(to, tokenId);
+    }
+
+    function buyNFT(uint256 tokenId) public payable {
+        require(nftContract.ownerOf(tokenId) != address(0), "Invalid token");
+        require(msg.value >= nftPrices[tokenId], "Insufficient funds");
+        
+        address owner = nftContract.ownerOf(tokenId);
+        nftContract.safeTransferFrom(owner, msg.sender, tokenId);
+        payable(owner).transfer(msg.value);
+    }
+
+    function putNFTForSale(uint256 tokenId, uint256 price) public {
+        require(nftContract.ownerOf(tokenId) == msg.sender, "Not the owner");
+        require(price > 0, "Price must be greater than 0");
+        
+        nftPrices[tokenId] = price;
+    }
+
+    function buyNFTFromSale(uint256 tokenId) public payable {
+        require(nftContract.tokenExists(tokenId), "Invalid token");
+        require(nftPrices[tokenId] > 0, "NFT not for sale");
+        require(msg.value >= nftPrices[tokenId], "Insufficient funds");
+        
+        address owner = nftContract.ownerOf(tokenId);
+        nftContract.safeTransferFrom(owner, msg.sender, tokenId);
+        payable(owner).transfer(msg.value);
+        nftPrices[tokenId] = 0;
+    }
+
+    function removeFromSale(uint256 tokenId) public {
+        require(nftContract.ownerOf(tokenId) == msg.sender, "Not the owner");
+        nftPrices[tokenId] = 0;
+    }
+
+    function getNFTsForSale() public view returns (uint256[] memory) {
+        uint256[] memory tokensForSale = new uint256[](nftContract.totalNFTs());
+
+        uint256 count = 0;
+        for (uint256 tokenId = 0; tokenId < nftContract.totalNFTs(); tokenId++) {
+            if (nftContract.ownerOf(tokenId) == address(this)) {
+                tokensForSale[count] = tokenId;
+                count++;
+            }
+        }
+        return tokensForSale;
+    }
+
+
     // Fonction pour ajouter de la liquidité via Uniswap
     function addLiquidity(uint256 tokenAmount, uint256 ethAmount) external onlyOwner {
         address tokenAddress = address(this);
